@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>@yield('title', 'Panabo City Library')</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ asset('css/app.css') }}">
+  @stack('head')
+</head>
+<body class="app-shell">
+  <div class="app-layout">
+    @isset($sidebar)
+      {!! $sidebar !!}
+    @endisset
+    <main class="app-main">
+      @isset($topbar)
+        {!! $topbar !!}
+        <script>
+          // Fallback: ensure notification bell works when component stack scripts didn't execute
+          document.addEventListener('DOMContentLoaded', function(){
+            try {
+              var btn = document.getElementById('notifBtn');
+              var dropdownWrap = document.getElementById('notificationDropdown');
+              if (btn && dropdownWrap && !window.toggleNotifDropdown) {
+                btn.addEventListener('click', function(e){ e.stopPropagation(); dropdownWrap.classList.toggle('open'); });
+                document.addEventListener('click', function(e){ if(!e.target.closest('.notif-dropdown') && !e.target.closest('#notifBtn')) dropdownWrap.classList.remove('open'); });
+                window.toggleNotifDropdown = function(e){ e.stopPropagation(); dropdownWrap.classList.toggle('open'); };
+              }
+            } catch (err) {}
+          });
+        </script>
+      @endisset
+      <div class="app-content">
+        @yield('content')
+      </div>
+    </main>
+  </div>
+  <script>
+    function showPanel(name) {
+      document.querySelectorAll('.panel').forEach((panel) => panel.classList.remove('active'));
+      const target = document.getElementById('panel-' + name);
+      if (target) target.classList.add('active');
+
+      document.querySelectorAll('[data-panel-button]').forEach((button) => button.classList.remove('active'));
+      const activeButton = document.querySelector('[data-panel-button="' + name + '"]');
+      if (activeButton) {
+        activeButton.classList.add('active');
+        const title = document.getElementById('topbarTitle');
+        if (title && activeButton.dataset.title) title.textContent = activeButton.dataset.title;
+      }
+    }
+  </script>
+  @stack('scripts')
+</body>
+</html>

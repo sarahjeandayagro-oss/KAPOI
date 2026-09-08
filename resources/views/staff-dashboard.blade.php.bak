@@ -1,0 +1,383 @@
+
+@extends('layouts.app')
+
+@section('title', 'Panabo City Library - Staff Portal')
+
+@php
+  $pendingResearchers = $pendingResearchers ?? collect();
+  $pendingStudents = $pendingStudents ?? collect();
+  $repeatVisitors = $repeatVisitors ?? collect();
+  $wifiConsumers = $wifiConsumers ?? collect();
+  $realtimeAttendance = $realtimeAttendance ?? collect();
+  $staffAttendanceSummary = $staffAttendanceSummary ?? collect();
+
+  $sidebar = view('components.sidebar', [
+    'brand' => 'Panabo City Library',
+    'subtitle' => 'Staff Portal',
+    'avatar' => auth()->user() ? strtoupper(substr(auth()->user()->name, 0, 1)) : 'S',
+    'userName' => auth()->user()?->name ?? 'Staff',
+    'userRole' => 'Staff',
+    'activePanel' => session('active_panel', 'dashboard'),
+  ]);
+
+  $topbar = view('components.topbar', [
+    'title' => 'Staff Dashboard',
+    'subtitle' => 'Library Management Console',
+  ]);
+@endphp
+
+@section('content')
+  @if(session('success'))
+    <div class="alert success">{{ session('success') }}</div>
+  @endif
+
+  @if(session('visitor_barcode'))
+    @php
+      $visitorPass = session('visitor_barcode');
+    @endphp
+    @component('components.card', ['title' => 'Visitor Barcode Generated', 'subtitle' => 'Give this pass to the visitor'])
+      <div class="pass-card">
+        <div>
+          <div class="pass-name">{{ $visitorPass['full_name'] }}</div>
+          <div class="text-muted">{{ $visitorPass['school'] }} · {{ $visitorPass['created_at'] }}</div>
+        </div>
+        <div class="pass-code">{{ $visitorPass['barcode_id'] }}</div>
+      </div>
+    @endcomponent
+  @endif
+
+  <section id="panel-dashboard" class="panel active">
+    <div class="grid-3">
+      @include('components.stat-card', ['label' => 'Pending Verifications', 'value' => count($pendingResearchers) + count($pendingStudents), 'change' => 'Student and researcher accounts'])
+      @include('components.stat-card', ['label' => 'Today Attendance', 'value' => $todayAttendanceCount ?? 0, 'change' => 'Recorded entries'])
+      @include('components.stat-card', ['label' => 'Active Wi-Fi Vouchers', 'value' => count($wifiConsumers), 'change' => 'Tracked live'])
+    </div>
+
+    <div class="grid-2">
+      @component('components.card', ['title' => 'Recent Attendance'])
+        <table>
+          <thead><tr><th>Name</th><th>ID</th><th>Type</th><th>Time</th></tr></thead>
+          <tbody>
+            @forelse($realtimeAttendance->take(5) as $log)
+              <tr>
+                <td>{{ $log->name }}</td>
+                <td>{{ $log->user_id }}</td>
+                <td><span class="status-chip">{{ $log->type }}</span></td>
+                <td>{{ \Carbon\Carbon::parse($log->created_at)->format('h:i A') }}</td>
+              </tr>
+            @empty
+              <tr><td colspan="4">No attendance yet.</td></tr>
+            @endforelse
+          </tbody>
+        </table>
+      @endcomponent
+
+      @component('components.card', ['title' => 'Repeat Visitors'])
+        <table>
+          <thead><tr><th>Name</th><th>ID</th><th>Visits</th></tr></thead>
+          <tbody>
+            @forelse($repeatVisitors as $visitor)
+              <tr>
+                <td>{{ $visitor->name }}</td>
+                <td>{{ $visitor->user_id }}</td>
+                <td><span class="status-chip approved">{{ $visitor->total_visits }}</span></td>
+              </tr>
+            @empty
+              <tr><td colspan="3">No repeat visitors.</td></tr>
+            @endforelse
+          </tbody>
+        </table>
+      @endcomponent
+    </div>
+  </section>
+
+  <section id="panel-verify" class="panel">
+    <div class="grid-2">
+      @component('components.card', ['title' => 'Pending Student Applications', 'subtitle' => 'Verify before login access'])
+        <table>
+          <thead><tr><th>Name</th><th>School</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody>
+            @forelse($pendingStudents as $student)
+              <tr>
+                <td>{{ $student->name }}<br><span class="text-muted">{{ $student->email }}</span></td>
+                <td>{{ $student->school }}</td>
+                <td><span class="status-chip pending">Pending</span></td>
+                <td>
+                  <div style="display:flex; flex-direction:column; gap:8px;">
+                    <form method="POST" action="{{ route('admin.verify-researcher') }}">
+                      @csrf
+                      <input type="hidden" name="user_id" value="{{ $student->user_id }}">
+                      <button class="btn-primary" type="submit">Verify</button>
+                    </form>
+                    <form method="POST" action="{{ route('admin.assign-barcode') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                      @csrf
+                      <input type="hidden" name="user_id" value="{{ $student->user_id }}">
+                      <select name="barcode_id" required style="min-width:160px;">
+                        <option value="">Assign barcode</option>
+                        @foreach($availableBarcodes as $barcode)
+                          <option value="{{ $barcode->barcode_id }}">{{ $barcode->barcode_id }}</option>
+                        @endforeach
+                      </select>
+                      <button class="btn-secondary" type="submit">Assign</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            @empty
+              <tr><td colspan="4">No pending students.</td></tr>
+            @endforelse
+          </tbody>
+        </table>
+      @endcomponent
+
+      @component('components.card', ['title' => 'Pending Researcher Applications', 'subtitle' => 'Verify before login access'])
+        <table>
+          <thead><tr><th>Name</th><th>School</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody>
+            @forelse($pendingResearchers as $researcher)
+              <tr>
+                <td>{{ $researcher->name }}<br><span class="text-muted">{{ $researcher->email }}</span></td>
+                <td>{{ $researcher->school }}</td>
+                <td><span class="status-chip pending">Pending</span></td>
+                <td>
+                  <div style="display:flex; flex-direction:column; gap:8px;">
+                    <form method="POST" action="{{ route('admin.verify-researcher') }}">
+                      @csrf
+                      <input type="hidden" name="user_id" value="{{ $researcher->user_id }}">
+                      <button class="btn-primary" type="submit">Verify</button>
+                    </form>
+                    <form method="POST" action="{{ route('admin.assign-barcode') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                      @csrf
+                      <input type="hidden" name="user_id" value="{{ $researcher->user_id }}">
+                      <select name="barcode_id" required style="min-width:160px;">
+                        <option value="">Assign barcode</option>
+                        @foreach($availableBarcodes as $barcode)
+                          <option value="{{ $barcode->barcode_id }}">{{ $barcode->barcode_id }}</option>
+                        @endforeach
+                      </select>
+                      <button class="btn-secondary" type="submit">Assign</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            @empty
+              <tr><td colspan="4">No pending researchers.</td></tr>
+            @endforelse
+          </tbody>
+        </table>
+      @endcomponent
+    </div>
+  </section>
+
+  <section id="panel-barcodes" class="panel">
+    <div class="grid-2">
+      @component('components.card', ['title' => 'Create Available Barcode', 'subtitle' => 'Add a new unused barcode to the pool'])
+        <form method="POST" action="{{ route('admin.available-barcodes.store') }}" style="display:flex; gap:10px; flex-wrap:wrap; align-items:end;">
+          @csrf
+          <div class="form-group" style="margin:0; flex:1; min-width:220px;">
+            <label>Barcode ID</label>
+            <input type="text" name="barcode_id" placeholder="202600300" required>
+          </div>
+          <button class="btn-primary" type="submit">Create Barcode</button>
+        </form>
+      @endcomponent
+
+      @component('components.card', ['title' => 'Available Barcode Pool', 'subtitle' => 'Pre-generated barcodes waiting for assignment'])
+        <table>
+          <thead><tr><th>Barcode ID</th><th>Assigned User</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody>
+            @forelse($availableBarcodes as $barcode)
+              <tr>
+                <td><strong>{{ $barcode->barcode_id }}</strong></td>
+                <td>{{ $barcode->assigned_user_id ?? 'Unassigned' }}</td>
+                <td><span class="status-chip pending">Available</span></td>
+                <td>
+                  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <form method="POST" action="{{ route('admin.available-barcodes.update', $barcode->id) }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                      @csrf
+                      <input type="text" name="barcode_id" value="{{ $barcode->barcode_id }}" style="width:140px;" required>
+                      <button class="btn-secondary" type="submit">Update</button>
+                    </form>
+                    <form method="POST" action="{{ route('admin.available-barcodes.delete', $barcode->id) }}">
+                      @csrf
+                      <button class="btn-sm danger" type="submit" onclick="return confirm('Delete this available barcode?')">Delete</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            @empty
+              <tr><td colspan="4">No available barcodes yet.</td></tr>
+            @endforelse
+          </tbody>
+        </table>
+      @endcomponent
+    </div>
+  </section>
+
+  <section id="panel-attendance" class="panel">
+    <div class="grid-2">
+      @component('components.card', ['title' => 'Record Staff Attendance'])
+        <form method="POST" action="{{ route('staff.attendance.store') }}">
+          @csrf
+          <div class="form-group">
+            <label>Staff ID Number</label>
+            <input type="text" name="user_id" placeholder="STAFF-001" required>
+          </div>
+          <div class="form-group">
+            <label>Remarks</label>
+            <input type="text" name="remarks" placeholder="Optional remarks">
+          </div>
+          <button class="btn-primary" type="submit">Save Attendance</button>
+        </form>
+      @endcomponent
+
+      @component('components.card', ['title' => 'Attendance Summary'])
+        <table>
+          <thead><tr><th>Name</th><th>ID</th><th>Total Logs</th></tr></thead>
+          <tbody>
+            @forelse($staffAttendanceSummary as $staff)
+              <tr>
+                <td>{{ $staff->name }}</td>
+                <td>{{ $staff->user_id }}</td>
+                <td>{{ $staff->total_logs }}</td>
+              </tr>
+            @empty
+              <tr><td colspan="3">No staff attendance summary yet.</td></tr>
+            @endforelse
+          </tbody>
+        </table>
+      @endcomponent
+    </div>
+  </section>
+
+  <section id="panel-wifi" class="panel">
+    @component('components.card', ['title' => 'Wi-Fi Voucher Consumers'])
+      <table>
+        <thead><tr><th>Name</th><th>ID</th><th>Role</th><th>Voucher</th><th>Bandwidth</th></tr></thead>
+        <tbody>
+          @forelse($wifiConsumers as $consumer)
+            <tr>
+              <td>{{ $consumer->name }}</td>
+              <td>{{ $consumer->user_id }}</td>
+              <td>{{ ucfirst($consumer->role) }}</td>
+              <td>{{ $consumer->voucher_code }}</td>
+              <td>{{ $consumer->bandwidth_gb }} GB</td>
+            </tr>
+          @empty
+            <tr><td colspan="5">No voucher consumers found.</td></tr>
+          @endforelse
+        </tbody>
+      </table>
+    @endcomponent
+  </section>
+
+  <section id="panel-fines" class="panel">
+    @php
+      $financialRows = \Illuminate\Support\Facades\Schema::hasTable('financial_transactions')
+        ? \Illuminate\Support\Facades\DB::table('financial_transactions')->where('transaction_type', 'Fine')->latest('transaction_date')->get()
+        : collect();
+      $collectedFines = $financialRows->where('status', 'Paid')->sum('amount');
+      $unpaidFines = $financialRows->where('status', 'Unpaid')->sum('amount');
+    @endphp
+
+    <div class="section-header">
+      <div>
+        <div class="section-title">Fines</div>
+        <div class="section-sub">Monitor and update library fine records</div>
+      </div>
+    </div>
+
+    <div class="stats-grid" style="margin-bottom:18px;">
+      <div class="stat-card green">
+        <div class="stat-label">Collected Fines</div>
+        <div class="stat-value">PHP {{ number_format($collectedFines, 2) }}</div>
+      </div>
+      <div class="stat-card red">
+        <div class="stat-label">Unpaid Fines</div>
+        <div class="stat-value">PHP {{ number_format($unpaidFines, 2) }}</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:18px;">
+      <div class="card-header"><div class="card-title">Add or Update Fine</div></div>
+      <div class="card-body">
+        <form action="{{ route('admin.financial-transactions.store') }}" method="POST" style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px;">
+          @csrf
+          <input type="hidden" name="transaction_type" value="Fine">
+          <div class="form-group" style="margin:0;"><label>Transaction ID (for edits)</label><input type="number" name="transaction_id" placeholder="Leave blank for new fine"></div>
+          <div class="form-group" style="margin:0;"><label>Patron / User ID</label><input type="text" name="user_id" placeholder="Barcode or user ID" required></div>
+          <div class="form-group" style="margin:0;"><label>Amount</label><input type="number" name="amount" step="0.01" min="0" required></div>
+          <div class="form-group" style="margin:0; grid-column: span 2;"><label>Description</label><input type="text" name="description" placeholder="Reason for fine" required></div>
+          <div class="form-group" style="margin:0;"><label>Status</label><select name="status" required><option>Unpaid</option><option>Paid</option></select></div>
+          <input type="hidden" name="transaction_date" value="{{ now()->toDateString() }}">
+          <div style="grid-column:1 / -1; text-align:right;"><button class="btn-primary" type="submit">Save Transaction</button></div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body" style="padding:0;">
+        <table>
+          <thead><tr><th>ID</th><th>User ID</th><th>Description</th><th>Amount</th><th>Status</th><th>Date</th><th>Update</th></tr></thead>
+          <tbody>
+            @forelse($financialRows as $row)
+              <tr>
+                <td>TXN-{{ str_pad($row->id, 4, '0', STR_PAD_LEFT) }}</td>
+                <td>{{ $row->user_id ?? 'N/A' }}</td>
+                <td>{{ $row->description }}</td>
+                <td style="font-weight:700;">PHP {{ number_format($row->amount, 2) }}</td>
+                <td><span class="status-chip {{ $row->status === 'Paid' ? 'returned' : 'pending' }}">{{ $row->status }}</span></td>
+                <td>{{ \Carbon\Carbon::parse($row->transaction_date)->format('M d, Y') }}</td>
+                <td>
+                  <form action="{{ route('admin.financial-transactions.store') }}" method="POST" style="display:grid; gap:6px; min-width:220px;">
+                    @csrf
+                    <input type="hidden" name="transaction_id" value="{{ $row->id }}">
+                    <input type="hidden" name="transaction_type" value="Fine">
+                    <input type="hidden" name="user_id" value="{{ $row->user_id }}">
+                    <input type="hidden" name="description" value="{{ $row->description }}">
+                    <input type="hidden" name="amount" value="{{ $row->amount }}">
+                    <input type="hidden" name="transaction_date" value="{{ \Carbon\Carbon::parse($row->transaction_date)->format('Y-m-d') }}">
+                    <select name="status" required>
+                      <option value="Unpaid" {{ $row->status === 'Unpaid' ? 'selected' : '' }}>Unpaid</option>
+                      <option value="Paid" {{ $row->status === 'Paid' ? 'selected' : '' }}>Paid</option>
+                    </select>
+                    <button class="btn-sm" type="submit">Save Status</button>
+                  </form>
+                </td>
+              </tr>
+            @empty
+              <tr><td colspan="7" style="text-align:center;">No fine records yet.</td></tr>
+            @endforelse
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="panel-visitors" class="panel">
+    <div class="grid-2">
+      @component('components.card', ['title' => 'Generate Visitor Barcode'])
+        <form method="POST" action="{{ route('staff.visitor-barcode.store') }}">
+          @csrf
+          <div class="form-group">
+            <label>Visitor Full Name</label>
+            <input type="text" name="full_name" placeholder="Enter visitor name" required>
+          </div>
+          <div class="form-group">
+            <label>School / Affiliation</label>
+            <input type="text" name="school" placeholder="Optional school or organization">
+          </div>
+          <div class="form-group">
+            <label>Notes</label>
+            <input type="text" name="notes" placeholder="Optional purpose of visit">
+          </div>
+          <button class="btn-primary" type="submit">Generate Barcode</button>
+        </form>
+      @endcomponent
+
+      @component('components.card', ['title' => 'Visitor Desk'])
+        <p class="text-muted">Generated visitor barcodes are saved as active member records and can be scanned at the entrance portal.</p>
+      @endcomponent
+    </div>
+  </section>
+@endsection
