@@ -1,0 +1,20 @@
+/* Shared site stylesheet (partial) */
+/* Button styles shared across pages */
+.btn-scan {
+  width: 100%;
+  padding: 13px;
+  background: transparent;
+  border: 1px solid var(--btn-signin-blue);
+  border-radius: 10px;
+  color: var(--btn-signin-blue);
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-decoration: none;
+}
+.btn-scan:hover { background: rgba(47,158,143,0.04); }
